@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tải Video Không Logo</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Tải Video Không Logo</h1>
+        <p class="subtitle">Dán link từ TikTok, Instagram, YouTube, Twitter/X, Facebook, Douyin để tải video!</p>
+        <div class="input-group">
+            <input type="text" id="videoUrl" placeholder="Dán link nội dung (ví dụ: https://youtu.be/...)">
+            <span id="platformIcon" class="platform-icon"></span>
+            <button id="fetchBtn" class="fetch-btn">Tải Ngay</button>
+        </div>
+        <div class="content-preview" id="contentPreview" style="display: none;">
+            <div class="video-info">
+                <img id="thumbnail" src="" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/300x150?text=Thumbnail+Not+Available';">
+                <div class="title-group">
+                    <h3 id="title" class="title-box">Tiêu đề video</h3>
+                    <button id="copyTitleBtn" class="copy-btn" title="Sao chép tiêu đề"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+            <div class="download-options">
+                <div class="subtitle-section">
+                    <h3>Tải Phụ Đề</h3>
+                    <div class="select-wrapper">
+                        <select id="subtitleLanguage">
+                            <option value="en">Tiếng Anh</option>
+                            <option value="vi">Tiếng Việt</option>
+                            <option value="es">Tiếng Tây Ban Nha</option>
+                            <option value="fr">Tiếng Pháp</option>
+                            <option value="de">Tiếng Đức</option>
+                            <option value="zh">Tiếng Trung</option>
+                            <option value="ja">Tiếng Nhật</option>
+                        </select>
+                        <select id="subtitleFormat">
+                            <option value="srt">SRT</option>
+                            <option value="txt">TXT</option>
+                        </select>
+                    </div>
+                    <button id="downloadSubtitleBtn" class="download-btn subtitle"><i class="fas fa-closed-captioning"></i> Tải Phụ Đề <span class="spinner"></span></button>
+                </div>
+                <div class="download-content">
+                    <h3>Chất lượng</h3>
+                    <div class="quality-options">
+                        <label><input type="radio" name="quality" value="high" checked> Cao (Full HD)</label>
+                        <label><input type="radio" name="quality" value="medium"> Trung (HD)</label>
+                        <label><input type="radio" name="quality" value="low"> Thấp (SD)</label>
+                    </div>
+                    <div class="download-buttons">
+                        <button id="downloadVideoBtn" class="download-btn"><i class="fas fa-video"></i> Tải Video</button>
+                        <button id="downloadAudioBtn" class="download-btn audio"><i class="fas fa-music"></i> Tải Âm Thanh</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="thumbnail-resolutions" id="thumbnailResolutions" style="display: none;">
+            <h4>Các độ phân giải Thumbnail</h4>
+            <div class="thumbnail-list"></div>
+            <button id="downloadThumbnailBtn" class="download-btn thumbnail"><i class="fas fa-image"></i> Tải Thumbnail <span class="spinner"></span></button>
+        </div>
+        <div id="result" class="result"></div>
+    </div>
+    <script defer src="script.js"></script>
+</body>
+</html>
