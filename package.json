@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "setup": "node setup.js",
+    "start": "npm run setup && node server.js",
+    "dev": "npm run setup && nodemon server.js"
   },
   "keywords": [],
   "author": "",
@@ -28,5 +30,11 @@
     "winston": "^3.17.0",
     "youtube-caption-extractor": "^1.4.3",
     "yt-dlp-exec": "^1.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
