@@ -16,10 +16,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const subtitleLanguage = document.getElementById('subtitleLanguage');
     const subtitleFormat = document.getElementById('subtitleFormat');
 
-    // Biến lưu thumbnail đã chọn
     let selectedThumbnail = null;
+    let currentVideoId = null;
 
-    // Hàm chuẩn hóa URL
+    // Hàm chuẩn hóa tên file
+    function sanitizeFileName(filename) {
+        return filename
+            .replace(/[<>:"\/\\|?*\x00-\x1F]/g, '_') // Loại bỏ ký tự không hợp lệ
+            .replace(/\s+/g, '_') // Thay khoảng trắng bằng dấu gạch dưới
+            .replace(/\.+/g, '.') // Loại bỏ nhiều dấu chấm liên tiếp
+            .replace(/^\.+|\.+$/g, '') // Loại bỏ dấu chấm ở đầu và cuối
+            .substring(0, 50) // Giới hạn độ dài tên file
+            .trim();
+    }
+
     function normalizeUrl(url) {
         if (!url) return '';
         url = url.trim();
@@ -29,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return url;
     }
 
-    // Hàm kiểm tra URL hợp lệ
     function isValidUrl(url) {
         try {
             new URL(url);
@@ -39,10 +48,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Hàm nhận diện nền tảng từ URL
     function detectPlatform(url) {
         if (!url || !isValidUrl(url)) return null;
-
         url = url.toLowerCase();
         const patterns = {
             tiktok: [/tiktok\.com/i, /tiktok\.com\/t\//i, /vt\.tiktok\.com/i],
@@ -52,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
             facebook: [/facebook\.com/i, /fb\.com/i, /fb\.watch/i],
             douyin: [/douyin\.com/i]
         };
-
         for (const [platform, regexes] of Object.entries(patterns)) {
             if (regexes.some(regex => regex.test(url))) {
                 return platform;
@@ -61,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     }
 
-    // Hàm cập nhật logo nền tảng
     function updatePlatformIcon(platform) {
         platformIcon.classList.remove('active', 'fa-tiktok', 'fa-instagram', 'fa-youtube', 'fa-twitter', 'fa-facebook', 'fa-douyin');
         if (platform) {
@@ -70,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Hàm lấy metadata
     async function fetchMetadata(url, platform) {
         try {
             const response = await fetch('/api/metadata', {
@@ -79,24 +83,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url, platform })
             });
             const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Không thể lấy dữ liệu');
+            }
             if (!data.title) {
                 data.title = platform === 'youtube' ? 'Video YouTube mẫu' : 'Mẫu tiêu đề video';
             }
             return data;
         } catch (error) {
             console.error('Metadata Error:', error);
-            return { thumbnail: '', title: platform === 'youtube' ? 'Video YouTube mẫu' : 'Mẫu tiêu đề video' };
+            throw error;
         }
     }
 
-    // Hàm lấy video ID từ URL YouTube
     function getYouTubeVideoId(url) {
         const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
         const match = url.match(regex);
         return match ? match[1] : null;
     }
 
-    // Hàm hiển thị các độ phân giải thumbnail
     function displayThumbnailResolutions(videoId) {
         const resolutions = [
             { name: 'HD (1280x720)', url: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` },
@@ -117,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const label = document.createElement('span');
             label.textContent = res.name;
 
-            // Sự kiện chọn thumbnail
             item.addEventListener('click', () => {
                 thumbnailList.querySelectorAll('.thumbnail-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
@@ -131,12 +135,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         thumbnailResolutions.style.display = 'block';
         if (resolutions.length > 0) {
-            thumbnailList.firstChild.classList.add('selected'); // Mặc định chọn HD
+            thumbnailList.firstChild.classList.add('selected');
             selectedThumbnail = { url: resolutions[0].url, name: resolutions[0].name };
         }
     }
 
-    // Hàm tải thumbnail dưới dạng .jpg
     function downloadThumbnail(url, name) {
         const spinner = downloadThumbnailBtn.querySelector('.spinner');
         spinner.style.display = 'inline';
@@ -147,18 +150,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Không có thumbnail để tải');
             }
 
-            // Fetch hình ảnh để đảm bảo tải đúng định dạng .jpg
             fetch(url)
                 .then(response => response.blob())
                 .then(blob => {
                     const blobUrl = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = blobUrl;
-                    a.download = `${title.textContent || 'thumbnail'}_${name.replace(/\s*\([^)]+\)/g, '')}.jpg`; // Đặt tên file
+                    const sanitizedTitle = sanitizeFileName(title.textContent || 'thumbnail');
+                    const sanitizedName = sanitizeFileName(name.replace(/\s*\([^)]+\)/g, ''));
+                    a.download = `${sanitizedTitle}_${sanitizedName}.jpg`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    window.URL.revokeObjectURL(blobUrl); // Giải phóng bộ nhớ
+                    window.URL.revokeObjectURL(blobUrl);
 
                     Swal.fire({
                         title: 'Thành công',
@@ -195,52 +199,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Hàm tải phụ đề
-    async function downloadSubtitle() {
+    async function downloadContent(type, btn, apiEndpoint, successMessage, downloadLabel) {
         const rawUrl = videoUrlInput.value;
         const url = normalizeUrl(rawUrl);
-        const language = subtitleLanguage.value;
-        const format = subtitleFormat.value;
         const platform = detectPlatform(url);
-
-        // Kiểm tra đầu vào
-        if (!rawUrl) {
-            Swal.fire({
-                title: 'Lỗi',
-                text: 'Vui lòng nhập link nội dung và nhấn Tải Ngay!',
-                icon: 'error',
-                confirmButtonText: 'OK',
-                customClass: {
-                    popup: 'swal-popup',
-                    title: 'swal-title',
-                    content: 'swal-content',
-                    confirmButton: 'swal-button'
-                }
-            });
-            return;
-        }
-
-        if (!isValidUrl(url)) {
-            Swal.fire({
-                title: 'Link không hợp lệ',
-                text: 'Vui lòng nhập một URL hợp lệ.',
-                icon: 'error',
-                confirmButtonText: 'OK',
-                customClass: {
-                    popup: 'swal-popup',
-                    title: 'swal-title',
-                    content: 'swal-content',
-                    confirmButton: 'swal-button'
-                }
-            });
-            return;
-        }
+        const quality = document.querySelector('input[name="quality"]:checked')?.value || 'high';
+        const language = type === 'subtitle' ? subtitleLanguage.value : null;
+        const format = type === 'subtitle' ? subtitleFormat.value : null;
 
         if (!platform) {
             Swal.fire({
-                title: 'Nền tảng không được hỗ trợ',
-                text: 'Vui lòng dán link từ TikTok, Instagram, YouTube, Twitter/X, Facebook hoặc Douyin.',
-                icon: 'warning',
+                title: 'Lỗi',
+                text: 'Vui lòng nhập link hợp lệ và nhấn Tải Ngay!',
+                icon: 'error',
                 confirmButtonText: 'OK',
                 customClass: {
                     popup: 'swal-popup',
@@ -252,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!language || !format) {
+        if (type === 'subtitle' && (!language || !format)) {
             Swal.fire({
                 title: 'Lỗi',
                 text: 'Vui lòng chọn ngôn ngữ và định dạng phụ đề!',
@@ -268,36 +239,308 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const spinner = downloadSubtitleBtn.querySelector('.spinner');
+        const spinner = btn.querySelector('.spinner');
         spinner.style.display = 'inline';
-        downloadSubtitleBtn.disabled = true;
+        btn.disabled = true;
 
-        resultDiv.classList.add('loading');
-        resultDiv.innerHTML = 'Đang tải phụ đề...';
+        let progressPopup = Swal.fire({
+            title: `Đang tải ${type === 'video' ? 'video' : type === 'audio' ? 'âm thanh' : 'phụ đề'}...`,
+            html: `
+                <div class="progress-wrapper">
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">0%</div>
+                        <div class="progress-status" id="progressStatus">Đang chuẩn bị tải...</div>
+                    </div>
+                    <div class="loading-spinner">
+                        <div class="spinner-circle"></div>
+                    </div>
+                </div>
+            `,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            customClass: {
+                popup: 'swal-popup',
+                title: 'swal-title',
+                content: 'swal-content',
+                progressBar: 'swal-progress-bar'
+            }
+        });
+
+        // Thêm CSS cho thanh tiến trình
+        const style = document.createElement('style');
+        style.textContent = `
+            .progress-wrapper {
+                padding: 20px;
+                text-align: center;
+            }
+            .progress-container {
+                margin-bottom: 15px;
+            }
+            .progress-bar {
+                width: 100%;
+                height: 20px;
+                background-color: #f0f0f0;
+                border-radius: 10px;
+                overflow: hidden;
+                position: relative;
+                box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+            }
+            .progress-fill {
+                width: 0%;
+                height: 100%;
+                background: linear-gradient(45deg, #2196F3, #00BCD4);
+                border-radius: 10px;
+                transition: width 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }
+            .progress-fill::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(
+                    45deg,
+                    rgba(255,255,255,0.2) 25%,
+                    transparent 25%,
+                    transparent 50%,
+                    rgba(255,255,255,0.2) 50%,
+                    rgba(255,255,255,0.2) 75%,
+                    transparent 75%,
+                    transparent
+                );
+                background-size: 30px 30px;
+                animation: progress-animation 1s linear infinite;
+            }
+            .progress-text {
+                margin-top: 10px;
+                font-size: 16px;
+                color: #666;
+                font-weight: bold;
+            }
+            .progress-status {
+                margin-top: 5px;
+                font-size: 14px;
+                color: #888;
+            }
+            .loading-spinner {
+                margin-top: 15px;
+            }
+            .spinner-circle {
+                width: 40px;
+                height: 40px;
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid #2196F3;
+                border-radius: 50%;
+                margin: 0 auto;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes progress-animation {
+                0% { background-position: 0 0; }
+                100% { background-position: 30px 0; }
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
 
         try {
-            const response = await fetch('/api/download-subtitle', {
+            const response = await fetch(apiEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, platform, language, format })
+                body: JSON.stringify({ 
+                    url, 
+                    platform, 
+                    type, 
+                    quality, 
+                    targetLanguage: language, 
+                    formatPreference: format, 
+                    videoId: currentVideoId 
+                })
             });
-
             const data = await response.json();
 
-            if (data.success && data.downloadUrl) {
-                const link = document.createElement('a');
-                link.href = data.downloadUrl;
-                link.download = `${title.textContent || 'subtitle'}_${language}.${format}`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+            if (!response.ok) {
+                throw new Error(data.error || 'Có lỗi xảy ra khi tải nội dung');
+            }
 
-                resultDiv.classList.remove('loading');
-                resultDiv.innerHTML = 'Đã tải phụ đề thành công!';
+            if (data.message === 'Đang tải, vui lòng chờ...') {
+                const downloadId = data.downloadId;
+                let eventSource = new EventSource(`/api/download-progress/${downloadId}`);
+                let lastProgress = 0;
 
+                eventSource.onmessage = (event) => {
+                    const progressData = JSON.parse(event.data);
+                    const progress = Math.min(progressData.progress, 100);
+                    const status = progressData.status || 'Đang tải...';
+                    
+                    const progressFill = document.querySelector('.progress-fill');
+                    const progressText = document.getElementById('progressText');
+                    const progressStatus = document.getElementById('progressStatus');
+                    
+                    // Cập nhật tiến trình mượt mà
+                    if (progress > lastProgress) {
+                        const updateProgress = () => {
+                            if (lastProgress < progress) {
+                                lastProgress = Math.min(lastProgress + 1, progress);
+                                progressFill.style.width = `${lastProgress}%`;
+                                progressText.textContent = `${lastProgress}%`;
+                                
+                                if (lastProgress < progress) {
+                                    setTimeout(updateProgress, 20);
+                                }
+                            }
+                        };
+                        updateProgress();
+                    }
+                    
+                    // Cập nhật trạng thái
+                    progressStatus.textContent = status;
+
+                    if (progress === 100) {
+                        eventSource.close();
+                        Swal.close();
+                        Swal.fire({
+                            title: `Tải ${type === 'video' ? 'video' : type === 'audio' ? 'âm thanh' : 'phụ đề'} hoàn tất!`,
+                            html: `
+                                <p>Nhấn nút bên dưới để tải ${type === 'video' ? 'video' : type === 'audio' ? 'âm thanh' : 'phụ đề'}.</p>
+                                <div class="custom-download-btn-container">
+                                    <button id="downloadConfirmBtn" class="custom-download-btn">
+                                        <i class="fas fa-download"></i> Download ${downloadLabel}
+                                    </button>
+                                </div>
+                            `,
+                            showConfirmButton: false,
+                            didOpen: () => {
+                                const downloadBtn = document.getElementById('downloadConfirmBtn');
+                                downloadBtn.addEventListener('click', () => {
+                                    const link = document.createElement('a');
+                                    link.href = data.downloadUrl;
+                                    const sanitizedTitle = sanitizeFileName(title.textContent || 'content');
+                                    const extension = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : `${language}.${format}`;
+                                    link.download = `${sanitizedTitle}.${extension}`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    Swal.close();
+                                    resultDiv.innerHTML = `${successMessage}`;
+                                });
+                            },
+                            customClass: {
+                                popup: 'swal-popup',
+                                title: 'swal-title',
+                                content: 'swal-content'
+                            }
+                        });
+                    }
+
+                    if (progressData.error) {
+                        eventSource.close();
+                        Swal.close();
+                        Swal.fire({
+                            title: 'Lỗi tải xuống',
+                            text: progressData.error || 'Có lỗi xảy ra khi tải nội dung. Vui lòng thử lại!',
+                            icon: 'error',
+                            confirmButtonText: 'OK',
+                            customClass: {
+                                popup: 'swal-popup',
+                                title: 'swal-title',
+                                content: 'swal-content',
+                                confirmButton: 'swal-button'
+                            }
+                        });
+                    }
+                };
+
+                eventSource.onerror = () => {
+                    eventSource.close();
+                    Swal.close();
+                    Swal.fire({
+                        title: 'Lỗi tải xuống',
+                        text: 'Không thể theo dõi tiến trình tải. Vui lòng thử lại!',
+                        icon: 'error',
+                        confirmButtonText: 'OK',
+                        customClass: {
+                            popup: 'swal-popup',
+                            title: 'swal-title',
+                            content: 'swal-content',
+                            confirmButton: 'swal-button'
+                        }
+                    });
+                };
+            } else if (data.downloadUrl) {
+                // Tải hoàn tất ngay lập tức (file đã có sẵn)
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                
+                // Hiển thị tiến trình mượt mà từ 0 đến 100
+                let progress = 0;
+                const updateProgress = () => {
+                    if (progress < 100) {
+                        progress++;
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `${progress}%`;
+                        setTimeout(updateProgress, 20);
+                    } else {
+                        Swal.close();
+                        Swal.fire({
+                            title: `Tải ${type === 'video' ? 'video' : type === 'audio' ? 'âm thanh' : 'phụ đề'} hoàn tất!`,
+                            html: `
+                                <p>Nhấn nút bên dưới để tải ${type === 'video' ? 'video' : type === 'audio' ? 'âm thanh' : 'phụ đề'}.</p>
+                                <div class="custom-download-btn-container">
+                                    <button id="downloadConfirmBtn" class="custom-download-btn">
+                                        <i class="fas fa-download"></i> Download ${downloadLabel}
+                                    </button>
+                                </div>
+                            `,
+                            showConfirmButton: false,
+                            didOpen: () => {
+                                const downloadBtn = document.getElementById('downloadConfirmBtn');
+                                downloadBtn.addEventListener('click', () => {
+                                    const link = document.createElement('a');
+                                    link.href = data.downloadUrl;
+                                    const sanitizedTitle = sanitizeFileName(title.textContent || 'content');
+                                    const extension = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : `${language}.${format}`;
+                                    link.download = `${sanitizedTitle}.${extension}`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    Swal.close();
+                                    resultDiv.innerHTML = `${successMessage}`;
+                                });
+                            },
+                            customClass: {
+                                popup: 'swal-popup',
+                                title: 'swal-title',
+                                content: 'swal-content'
+                            }
+                        });
+                    }
+                };
+                updateProgress();
+            } else if (data.images) {
+                // Tải ảnh (cho Instagram, v.v.)
+                data.images.forEach((url, index) => {
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `image_${index + 1}.jpg`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                });
+                resultDiv.innerHTML = 'Đã tải ảnh thành công!';
+                Swal.close();
                 Swal.fire({
                     title: 'Thành công',
-                    text: 'Đã tải phụ đề thành công!',
+                    text: 'Đã tải ảnh thành công!',
                     icon: 'success',
                     timer: 2000,
                     showConfirmButton: false,
@@ -308,14 +551,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             } else {
-                throw new Error(data.message || 'Không tìm thấy phụ đề để tải');
+                throw new Error('Không tìm thấy nội dung để tải.');
             }
         } catch (error) {
+            Swal.close();
             resultDiv.classList.remove('loading');
             resultDiv.innerHTML = '';
             Swal.fire({
-                title: 'Lỗi',
-                text: error.message || 'Không thể tải phụ đề. Vui lòng thử lại!',
+                title: 'Lỗi tải xuống',
+                text: error.message || 'Có lỗi xảy ra khi tải nội dung. Vui lòng thử lại!',
                 icon: 'error',
                 confirmButtonText: 'OK',
                 customClass: {
@@ -327,18 +571,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } finally {
             spinner.style.display = 'none';
-            downloadSubtitleBtn.disabled = false;
+            btn.disabled = false;
         }
     }
 
-    // Xử lý sự kiện input
-    videoUrlInput.addEventListener('input', () => {
+    videoUrlInput.addEventListener('input', async () => {
         const rawUrl = videoUrlInput.value;
         const url = normalizeUrl(rawUrl);
 
         if (!rawUrl) {
             updatePlatformIcon(null);
             contentPreview.style.display = 'none';
+            currentVideoId = null;
             return;
         }
 
@@ -363,6 +607,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const platform = detectPlatform(url);
         if (platform) {
             updatePlatformIcon(platform);
+            try {
+                const metadata = await fetchMetadata(url, platform);
+                currentVideoId = metadata.videoId;
+            } catch (error) {
+                Swal.fire({
+                    title: 'Lỗi',
+                    text: error.message || 'Không thể lấy dữ liệu. Vui lòng thử lại!',
+                    icon: 'error',
+                    confirmButtonText: 'OK',
+                    customClass: {
+                        popup: 'swal-popup',
+                        title: 'swal-title',
+                        content: 'swal-content',
+                        confirmButton: 'swal-button'
+                    }
+                });
+            }
         } else {
             updatePlatformIcon(null);
             contentPreview.style.display = 'none';
@@ -381,7 +642,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Sao chép tiêu đề
     copyTitleBtn.addEventListener('click', () => {
         const text = title.textContent;
         navigator.clipboard.writeText(text).then(() => {
@@ -413,7 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Xử lý khi nhấn "Tải Ngay"
     fetchBtn.addEventListener('click', async () => {
         const rawUrl = videoUrlInput.value;
         const url = normalizeUrl(rawUrl);
@@ -472,6 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const metadata = await fetchMetadata(url, platform);
+            currentVideoId = metadata.videoId;
             thumbnail.src = metadata.thumbnail || 'https://via.placeholder.com/300x150?text=Thumbnail+Not+Available';
             title.textContent = metadata.title || (platform === 'youtube' ? 'Video YouTube mẫu' : 'Mẫu tiêu đề video');
 
@@ -480,7 +740,6 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDiv.classList.remove('loading');
             resultDiv.innerHTML = '';
 
-            // Hiển thị các độ phân giải thumbnail nếu là YouTube
             if (platform === 'youtube') {
                 const videoId = getYouTubeVideoId(url);
                 if (videoId) {
@@ -495,7 +754,7 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDiv.classList.remove('loading');
             Swal.fire({
                 title: 'Lỗi',
-                text: 'Không thể lấy dữ liệu. Vui lòng thử lại!',
+                text: error.message || 'Không thể lấy dữ liệu. Vui lòng thử lại!',
                 icon: 'error',
                 confirmButtonText: 'OK',
                 customClass: {
@@ -510,142 +769,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlatformIcon(platform);
     });
 
-    // Hàm tải nội dung (tự động tải xuống)
-    async function download(type) {
-        const rawUrl = videoUrlInput.value;
-        const url = normalizeUrl(rawUrl);
-        const quality = document.querySelector('input[name="quality"]:checked').value;
-        const platform = detectPlatform(url);
+    downloadVideoBtn.addEventListener('click', () => downloadContent('video', downloadVideoBtn, '/api/download', 'Đã tải video thành công!', 'Video'));
+    downloadAudioBtn.addEventListener('click', () => downloadContent('audio', downloadAudioBtn, '/api/download', 'Đã tải âm thanh thành công!', 'Âm Thanh'));
+    downloadSubtitleBtn.addEventListener('click', () => downloadContent('subtitle', downloadSubtitleBtn, '/api/download-subtitle', 'Đã tải phụ đề thành công!', 'Phụ Đề'));
 
-        if (!platform) {
-            Swal.fire({
-                title: 'Lỗi',
-                text: 'Vui lòng nhập link hợp lệ và nhấn Tải Ngay!',
-                icon: 'error',
-                confirmButtonText: 'OK',
-                customClass: {
-                    popup: 'swal-popup',
-                    title: 'swal-title',
-                    content: 'swal-content',
-                    confirmButton: 'swal-button'
-                }
-            });
-            return;
-        }
-
-        resultDiv.classList.add('loading');
-        resultDiv.innerHTML = `Đang tải ${type === 'video' ? 'video' : 'âm thanh'}...`;
-
-        try {
-            const response = await fetch('/api/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, platform, type, quality })
-            });
-            const data = await response.json();
-
-            resultDiv.classList.remove('loading');
-
-            if (data.error) {
-                Swal.fire({
-                    title: 'Lỗi tải xuống',
-                    text: data.error,
-                    icon: 'error',
-                    confirmButtonText: 'OK',
-                    customClass: {
-                        popup: 'swal-popup',
-                        title: 'swal-title',
-                        content: 'swal-content',
-                        confirmButton: 'swal-button'
-                    }
-                });
-                resultDiv.innerHTML = '';
-                return;
-            }
-
-            if (data.downloadUrl) {
-                const link = document.createElement('a');
-                link.href = data.downloadUrl;
-                link.download = `${title.textContent || 'content'}_${type}.${type === 'video' ? 'mp4' : 'mp3'}`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                resultDiv.innerHTML = `Đã tải ${type === 'video' ? 'video' : 'âm thanh'} thành công!`;
-                Swal.fire({
-                    title: 'Thành công',
-                    text: `Đã tải ${type === 'video' ? 'video' : 'âm thanh'} thành công!`,
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false,
-                    customClass: {
-                        popup: 'swal-popup',
-                        title: 'swal-title',
-                        content: 'swal-content'
-                    }
-                });
-            } else if (data.images) {
-                data.images.forEach((url, index) => {
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `image_${index + 1}.jpg`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                });
-                resultDiv.innerHTML = 'Đã tải ảnh thành công!';
-                Swal.fire({
-                    title: 'Thành công',
-                    text: 'Đã tải ảnh thành công!',
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false,
-                    customClass: {
-                        popup: 'swal-popup',
-                        title: 'swal-title',
-                        content: 'swal-content'
-                    }
-                });
-            } else {
-                resultDiv.innerHTML = '';
-                Swal.fire({
-                    title: 'Lỗi tải xuống',
-                    text: 'Không tìm thấy nội dung để tải. Vui lòng thử lại!',
-                    icon: 'error',
-                    confirmButtonText: 'OK',
-                    customClass: {
-                        popup: 'swal-popup',
-                        title: 'swal-title',
-                        content: 'swal-content',
-                        confirmButton: 'swal-button'
-                    }
-                });
-            }
-        } catch (error) {
-            resultDiv.classList.remove('loading');
-            resultDiv.innerHTML = '';
-            Swal.fire({
-                title: 'Lỗi tải xuống',
-                text: error.message || 'Có lỗi xảy ra khi tải nội dung. Vui lòng thử lại!',
-                icon: 'error',
-                confirmButtonText: 'OK',
-                customClass: {
-                    popup: 'swal-popup',
-                    title: 'swal-title',
-                    content: 'swal-content',
-                    confirmButton: 'swal-button'
-                }
-            });
-        }
-    }
-
-    // Xử lý tải video
-    downloadVideoBtn.addEventListener('click', () => download('video'));
-
-    // Xử lý tải âm thanh
-    downloadAudioBtn.addEventListener('click', () => download('audio'));
-
-    // Xử lý tải thumbnail
     downloadThumbnailBtn.addEventListener('click', () => {
         const spinner = downloadThumbnailBtn.querySelector('.spinner');
         spinner.style.display = 'inline';
@@ -674,7 +801,4 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadThumbnailBtn.disabled = false;
         }
     });
-
-    // Xử lý tải phụ đề
-    downloadSubtitleBtn.addEventListener('click', () => downloadSubtitle());
 });

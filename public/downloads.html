@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thư Mục Tải Xuống | SnapTubeX</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .downloads-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .downloads-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .downloads-title {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+
+        .files-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .files-table th,
+        .files-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .files-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .files-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .file-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-icon {
+            color: #007bff;
+            font-size: 1.2em;
+        }
+
+        .file-size {
+            color: #666;
+        }
+
+        .file-date {
+            color: #666;
+        }
+
+        .download-link {
+            color: #007bff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .download-link:hover {
+            color: #0056b3;
+        }
+
+        .no-files {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #007bff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <a href="/" class="logo">SnapTubeX</a>
+        <div class="nav-links">
+            <a href="privacy-policy.html" target="_blank">Privacy Policy</a>
+            <a href="terms-of-service.html" target="_blank">Terms of Service</a>
+        </div>
+    </header>
+
+    <div class="downloads-container">
+        <div class="downloads-header">
+            <h1 class="downloads-title">Thư Mục Tải Xuống</h1>
+            <button class="refresh-btn" onclick="loadFiles()">
+                <i class="fas fa-sync-alt"></i>
+                Làm Mới
+            </button>
+        </div>
+
+        <div id="filesContainer">
+            <div class="loading">Đang tải danh sách file...</div>
+        </div>
+    </div>
+
+    <script>
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('vi-VN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function getFileIcon(fileName) {
+            const extension = fileName.split('.').pop().toLowerCase();
+            const iconMap = {
+                'mp4': 'fa-file-video',
+                'mp3': 'fa-file-audio',
+                'srt': 'fa-closed-captioning',
+                'vtt': 'fa-closed-captioning',
+                'txt': 'fa-file-alt'
+            };
+            return iconMap[extension] || 'fa-file';
+        }
+
+        async function loadFiles() {
+            const container = document.getElementById('filesContainer');
+            container.innerHTML = '<div class="loading">Đang tải danh sách file...</div>';
+
+            try {
+                const response = await fetch('/api/downloads');
+                const files = await response.json();
+
+                // Lọc chỉ lấy file .mp4 và .mp3
+                const filteredFiles = files.filter(file => {
+                    const extension = file.name.split('.').pop().toLowerCase();
+                    return extension === 'mp4' || extension === 'mp3';
+                });
+
+                if (filteredFiles.length === 0) {
+                    container.innerHTML = '<div class="no-files">Không có file video hoặc âm thanh nào trong thư mục tải xuống</div>';
+                    return;
+                }
+
+                const table = document.createElement('table');
+                table.className = 'files-table';
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Tên File</th>
+                            <th>Loại</th>
+                            <th>Kích Thước</th>
+                            <th>Ngày Tải</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredFiles.map(file => {
+                            const extension = file.name.split('.').pop().toLowerCase();
+                            const fileType = extension === 'mp4' ? 'Video' : 'Âm thanh';
+                            const iconClass = extension === 'mp4' ? 'fa-file-video' : 'fa-file-audio';
+                            return `
+                                <tr>
+                                    <td>
+                                        <div class="file-name">
+                                            <i class="fas ${iconClass} file-icon"></i>
+                                            ${file.name}
+                                        </div>
+                                    </td>
+                                    <td>${fileType}</td>
+                                    <td class="file-size">${formatFileSize(file.size)}</td>
+                                    <td class="file-date">${formatDate(file.date)}</td>
+                                    <td>
+                                        <a href="${file.url}" class="download-link" download>
+                                            <i class="fas fa-download"></i>
+                                            Tải Xuống
+                                        </a>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                `;
+
+                container.innerHTML = '';
+                container.appendChild(table);
+            } catch (error) {
+                container.innerHTML = '<div class="no-files">Không thể tải danh sách file. Vui lòng thử lại sau.</div>';
+                console.error('Error loading files:', error);
+            }
+        }
+
+        // Tải danh sách file khi trang được mở
+        document.addEventListener('DOMContentLoaded', loadFiles);
+    </script>
+</body>
+</html> 

@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tải Video Không Logo</title>
+    <title>SnapTubeX | Tải Video Không Logo</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
+    <header class="header">
+        <a href="/" class="logo">SnapTubeX</a>
+        <div class="nav-links">
+            <a href="privacy-policy.html" id="privacyPolicyLink" target="_blank">Privacy Policy</a>
+            <a href="terms-of-service.html" id="termsOfServiceLink" target="_blank">Terms of Service</a>
+        </div>
+    </header>
     <div class="container">
-        <h1 class="title">Tải Video Không Logo</h1>
+        <h1 class="title">Tải Video Youtube</h1>
         <p class="subtitle">Dán link từ TikTok, Instagram, YouTube, Twitter/X, Facebook, Douyin để tải video!</p>
         <div class="input-group">
             <input type="text" id="videoUrl" placeholder="Dán link nội dung (ví dụ: https://youtu.be/...)">
@@ -30,17 +37,116 @@
                     <h3>Tải Phụ Đề</h3>
                     <div class="select-wrapper">
                         <select id="subtitleLanguage">
+                            <option value="">Chọn ngôn ngữ phụ đề</option>
+                            <option value="af">Tiếng Afrikaans</option>
+                            <option value="sq">Tiếng Albania</option>
+                            <option value="am">Tiếng Amharic</option>
+                            <option value="ar">Tiếng Ả Rập</option>
+                            <option value="hy">Tiếng Armenia</option>
+                            <option value="az">Tiếng Azerbaijan</option>
+                            <option value="eu">Tiếng Basque</option>
+                            <option value="be">Tiếng Belarus</option>
+                            <option value="bn">Tiếng Bengal</option>
+                            <option value="bs">Tiếng Bosnia</option>
+                            <option value="bg">Tiếng Bulgaria</option>
+                            <option value="ca">Tiếng Catalan</option>
+                            <option value="ceb">Tiếng Cebuano</option>
+                            <option value="ny">Tiếng Chichewa</option>
+                            <option value="zh">Tiếng Trung (Giản thể)</option>
+                            <option value="zh-tw">Tiếng Trung (Phồn thể)</option>
+                            <option value="co">Tiếng Corsica</option>
+                            <option value="hr">Tiếng Croatia</option>
+                            <option value="cs">Tiếng Séc</option>
+                            <option value="da">Tiếng Đan Mạch</option>
+                            <option value="nl">Tiếng Hà Lan</option>
                             <option value="en">Tiếng Anh</option>
-                            <option value="vi">Tiếng Việt</option>
-                            <option value="es">Tiếng Tây Ban Nha</option>
+                            <option value="eo">Tiếng Esperanto</option>
+                            <option value="et">Tiếng Estonia</option>
+                            <option value="tl">Tiếng Filipino</option>
+                            <option value="fi">Tiếng Phần Lan</option>
                             <option value="fr">Tiếng Pháp</option>
+                            <option value="fy">Tiếng Frisian</option>
+                            <option value="gl">Tiếng Galician</option>
+                            <option value="ka">Tiếng Gruzia</option>
                             <option value="de">Tiếng Đức</option>
-                            <option value="zh">Tiếng Trung</option>
+                            <option value="el">Tiếng Hy Lạp</option>
+                            <option value="gu">Tiếng Gujarati</option>
+                            <option value="ht">Tiếng Haiti Creole</option>
+                            <option value="ha">Tiếng Hausa</option>
+                            <option value="haw">Tiếng Hawaii</option>
+                            <option value="iw">Tiếng Hebrew</option>
+                            <option value="hi">Tiếng Hindi</option>
+                            <option value="hmn">Tiếng Hmong</option>
+                            <option value="hu">Tiếng Hungary</option>
+                            <option value="is">Tiếng Iceland</option>
+                            <option value="ig">Tiếng Igbo</option>
+                            <option value="id">Tiếng Indonesia</option>
+                            <option value="ga">Tiếng Ireland</option>
+                            <option value="it">Tiếng Ý</option>
                             <option value="ja">Tiếng Nhật</option>
+                            <option value="jw">Tiếng Javan</option>
+                            <option value="kn">Tiếng Kannada</option>
+                            <option value="kk">Tiếng Kazakh</option>
+                            <option value="km">Tiếng Khmer</option>
+                            <option value="ko">Tiếng Hàn</option>
+                            <option value="ku">Tiếng Kurdish (Kurmanji)</option>
+                            <option value="ky">Tiếng Kyrgyz</option>
+                            <option value="lo">Tiếng Lào</option>
+                            <option value="la">Tiếng Latinh</option>
+                            <option value="lv">Tiếng Latvia</option>
+                            <option value="lt">Tiếng Lithuania</option>
+                            <option value="lb">Tiếng Luxembourg</option>
+                            <option value="mk">Tiếng Macedonia</option>
+                            <option value="mg">Tiếng Malagasy</option>
+                            <option value="ms">Tiếng Malay</option>
+                            <option value="ml">Tiếng Malayalam</option>
+                            <option value="mt">Tiếng Malta</option>
+                            <option value="mi">Tiếng Maori</option>
+                            <option value="mr">Tiếng Marathi</option>
+                            <option value="mn">Tiếng Mông Cổ</option>
+                            <option value="my">Tiếng Myanmar (Burma)</option>
+                            <option value="ne">Tiếng Nepal</option>
+                            <option value="no">Tiếng Na Uy</option>
+                            <option value="ps">Tiếng Pashto</option>
+                            <option value="fa">Tiếng Ba Tư</option>
+                            <option value="pl">Tiếng Ba Lan</option>
+                            <option value="pt">Tiếng Bồ Đào Nha</option>
+                            <option value="pa">Tiếng Punjabi</option>
+                            <option value="ro">Tiếng Rumani</option>
+                            <option value="ru">Tiếng Nga</option>
+                            <option value="sm">Tiếng Samoa</option>
+                            <option value="gd">Tiếng Scotland Gaelic</option>
+                            <option value="sr">Tiếng Serbia</option>
+                            <option value="st">Tiếng Sesotho</option>
+                            <option value="sn">Tiếng Shona</option>
+                            <option value="sd">Tiếng Sindhi</option>
+                            <option value="si">Tiếng Sinhala</option>
+                            <option value="sk">Tiếng Slovak</option>
+                            <option value="sl">Tiếng Slovenia</option>
+                            <option value="so">Tiếng Somali</option>
+                            <option value="es">Tiếng Tây Ban Nha</option>
+                            <option value="su">Tiếng Sundanese</option>
+                            <option value="sw">Tiếng Swahili</option>
+                            <option value="sv">Tiếng Thụy Điển</option>
+                            <option value="tg">Tiếng Tajik</option>
+                            <option value="ta">Tiếng Tamil</option>
+                            <option value="te">Tiếng Telugu</option>
+                            <option value="th">Tiếng Thái</option>
+                            <option value="tr">Tiếng Thổ Nhĩ Kỳ</option>
+                            <option value="uk">Tiếng Ukraina</option>
+                            <option value="ur">Tiếng Urdu</option>
+                            <option value="uz">Tiếng Uzbek</option>
+                            <option value="vi">Tiếng Việt</option>
+                            <option value="cy">Tiếng Wales</option>
+                            <option value="xh">Tiếng Xhosa</option>
+                            <option value="yi">Tiếng Yiddish</option>
+                            <option value="yo">Tiếng Yoruba</option>
+                            <option value="zu">Tiếng Zulu</option>
                         </select>
                         <select id="subtitleFormat">
                             <option value="srt">SRT</option>
                             <option value="txt">TXT</option>
+                            <option value="vtt">VTT</option>
                         </select>
                     </div>
                     <button id="downloadSubtitleBtn" class="download-btn subtitle"><i class="fas fa-closed-captioning"></i> Tải Phụ Đề <span class="spinner"></span></button>
@@ -53,8 +159,8 @@
                         <label><input type="radio" name="quality" value="low"> Thấp (SD)</label>
                     </div>
                     <div class="download-buttons">
-                        <button id="downloadVideoBtn" class="download-btn"><i class="fas fa-video"></i> Tải Video</button>
-                        <button id="downloadAudioBtn" class="download-btn audio"><i class="fas fa-music"></i> Tải Âm Thanh</button>
+                        <button id="downloadVideoBtn" class="download-btn"><i class="fas fa-video"></i> Tải Video <span class="spinner"></span></button>
+                        <button id="downloadAudioBtn" class="download-btn audio"><i class="fas fa-music"></i> Tải Âm Thanh <span class="spinner"></span></button>
                     </div>
                 </div>
             </div>
@@ -66,6 +172,9 @@
         </div>
         <div id="result" class="result"></div>
     </div>
+    <footer class="footer">
+        2025 © SnapTubeX
+    </footer>
     <script defer src="script.js"></script>
 </body>
 </html>
