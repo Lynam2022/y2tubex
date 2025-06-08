@@ -72,6 +72,10 @@ const utils = {
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Add router configuration
+const router = require('./router');
+app.use(router);
+
 // Middleware
 app.use(express.json({
     limit: '10kb',
