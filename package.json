@@ -16,7 +16,7 @@
     "@treeee/youtube-caption-extractor": "^1.0.0",
     "axios": "^1.6.2",
     "debug": "2.6.9",
-    "dotenv": "^16.3.1",
+    "dotenv": "16.0.3",
     "express": "4.17.1",
     "express-rate-limit": "5.3.0",
     "fluent-ffmpeg": "^2.1.2",
