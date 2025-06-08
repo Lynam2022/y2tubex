@@ -93,10 +93,6 @@ app.use('/downloads', express.static(path.join(__dirname, 'downloads'), {
     }
 }));
 
-// Add router configuration
-const router = require('./router');
-app.use('/', router);
-
 // Middleware xử lý CORS (giới hạn origin)
 const allowedOrigins = ['https://y2tubex.com', 'http://y2tubex.com'];
 app.use((req, res, next) => {
