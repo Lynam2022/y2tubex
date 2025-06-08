@@ -4,7 +4,7 @@ const path = require('path');
 const winston = require('winston');
 const ffmpeg = require('fluent-ffmpeg');
 const ytdl = require('@distube/ytdl-core');
-const ytDlp = require('yt-dlp');
+const ytDlp = require('yt-dlp-exec');
 
 // Khởi tạo logger với winston
 const logger = winston.createLogger({
@@ -545,6 +545,29 @@ function getDefaultLanguage() {
     return 'en'; // Ngôn ngữ mặc định cố định là tiếng Anh
 }
 
+// Hàm lấy video ID từ URL YouTube
+function getYouTubeVideoId(url) {
+    if (!url) return null;
+    
+    // Xử lý các định dạng URL YouTube khác nhau
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/watch\?.*&v=)([^&\n?#]+)/,
+        /youtube\.com\/shorts\/([^&\n?#]+)/,
+        /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+        /youtube\.com\/embed\/([^&\n?#]+)/,
+        /youtube\.com\/v\/([^&\n?#]+)/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+
+    return null;
+}
+
 // Xuất khẩu các hàm
 module.exports = {
     logger,
@@ -567,5 +590,6 @@ module.exports = {
     extractTextFromVtt,
     parseXmlSubtitles,
     getAvailableSubtitleLanguages,
-    getDefaultLanguage
+    getDefaultLanguage,
+    getYouTubeVideoId
 };
