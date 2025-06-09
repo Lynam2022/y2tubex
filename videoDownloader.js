@@ -154,27 +154,6 @@ async function getVideoInfo(url) {
     }
 }
 
-// Hàm lấy ID video từ URL YouTube
-function getYouTubeVideoId(url) {
-    if (!url) return null;
-    
-    // Xử lý các định dạng URL YouTube khác nhau
-    const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/watch\?.*&v=)([^&\n?#]+)/,
-        /youtube\.com\/shorts\/([^&\n?#]+)/,
-        /youtube\.com\/watch\?.*v=([^&\n?#]+)/
-    ];
-
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match && match[1]) {
-            return match[1];
-        }
-    }
-
-    return null;
-}
-
 // Hàm chọn định dạng khả dụng
 async function selectAvailableFormat(videoUrl, quality, type) {
     try {
@@ -277,11 +256,11 @@ async function handleDownload(req, res, downloadProgressMap) {
     let finalFilePath = null;
 
     try {
-        // Kiểm tra dữ liệu đầu vào
-        if (!url || !platform || !type) {
-            logger.warn(`Missing required fields (url, platform, type) from IP: ${req.ip}`);
-            throw new Error('Thiếu thông tin cần thiết (url, platform, type)');
-        }
+    // Kiểm tra dữ liệu đầu vào
+    if (!url || !platform || !type) {
+        logger.warn(`Missing required fields (url, platform, type) from IP: ${req.ip}`);
+        throw new Error('Thiếu thông tin cần thiết (url, platform, type)');
+    }
 
         // Kiểm tra rate limit
         try {
@@ -327,12 +306,12 @@ async function handleDownload(req, res, downloadProgressMap) {
         stream.pipe(writeStream);
 
         // Theo dõi tiến trình
-        let downloadedBytes = 0;
+                let downloadedBytes = 0;
         const totalBytes = videoInfo.contentLength;
 
-        stream.on('progress', (chunkLength, downloaded, total) => {
-            downloadedBytes = downloaded;
-            const progress = Math.round((downloaded / total) * 100);
+                            stream.on('progress', (chunkLength, downloaded, total) => {
+                                downloadedBytes = downloaded;
+                                const progress = Math.round((downloaded / total) * 100);
             downloadProgressMap.set(downloadId, {
                 progress,
                 status: 'downloading',
@@ -343,7 +322,7 @@ async function handleDownload(req, res, downloadProgressMap) {
         });
 
         // Xử lý khi tải xong
-        await new Promise((resolve, reject) => {
+                            await new Promise((resolve, reject) => {
             writeStream.on('finish', resolve);
             writeStream.on('error', reject);
         });
@@ -372,7 +351,7 @@ async function handleDownload(req, res, downloadProgressMap) {
             filePath: `/downloads/${fileName}`
         });
 
-    } catch (error) {
+                } catch (error) {
         logger.error(`Error in handleDownload: ${error.message}`, {
             error: error.stack,
             url,
