@@ -259,49 +259,33 @@ async function downloadSubtitleWithYtdlCore(videoId, language) {
 // Hàm tải phụ đề bằng node-youtube-subtitles
 async function downloadSubtitleWithNodeSubtitles(videoId, language) {
     try {
-        const { getSubtitles } = require('node-youtube-subtitles');
-        
-        // Thử tải phụ đề thủ công trước
-        let subtitles = await getSubtitles({ 
-            videoID: videoId, 
-            lang: language 
+        // Kiểm tra xem module có tồn tại không
+        let nodeSubtitles;
+        try {
+            nodeSubtitles = require('node-youtube-subtitles');
+        } catch (error) {
+            logger.warn('Module node-youtube-subtitles not found, skipping this method');
+            return null;
+        }
+
+        const subtitles = await nodeSubtitles.getSubtitles({
+            videoID: videoId,
+            lang: language
         });
 
-        // Nếu không có phụ đề thủ công, thử tải phụ đề tự động
         if (!subtitles || subtitles.length === 0) {
-            subtitles = await getSubtitles({ 
-                videoID: videoId, 
-                lang: `${language}.auto` 
-            });
+            logger.warn(`No subtitles found using node-youtube-subtitles for video ${videoId} and language ${language}`);
+            return null;
         }
 
-        // Nếu vẫn không có, thử tải phụ đề tiếng Anh làm fallback
-        if (!subtitles || subtitles.length === 0) {
-            subtitles = await getSubtitles({ 
-                videoID: videoId, 
-                lang: 'en' 
-            });
+        // Chuyển đổi định dạng phụ đề
+        const vttContent = arrayToVtt(subtitles);
+        if (!vttContent) {
+            logger.warn(`Failed to convert subtitles to VTT format for video ${videoId}`);
+            return null;
         }
 
-        if (subtitles && subtitles.length > 0) {
-            const content = arrayToVtt(subtitles);
-            if (!content || content.trim() === '') {
-                logger.warn(`Empty subtitle content from node-youtube-subtitles for language ${language}`);
-                return null;
-            }
-
-            // Kiểm tra và làm sạch nội dung
-            const cleanedContent = cleanSubtitleContent(content);
-            if (!cleanedContent) {
-                logger.warn(`Failed to clean subtitle content from node-youtube-subtitles for language ${language}`);
-                return null;
-            }
-
-            return content;
-        }
-
-        logger.warn(`No subtitles found with node-youtube-subtitles for language ${language}`);
-        return null;
+        return vttContent;
     } catch (error) {
         logger.error(`node-youtube-subtitles Error for language ${language}: ${error.message}`);
         return null;

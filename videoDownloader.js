@@ -103,50 +103,131 @@ initializeDirectories().catch(error => {
     logger.error(`Failed to initialize directories: ${error.message}`);
 });
 
-// Hàm kiểm tra danh sách định dạng để chọn định dạng khả dụng
-async function getAvailableFormats(videoUrl) {
-    logger.info(`Fetching formats for URL: ${videoUrl}`);
+// Hàm lấy thông tin video
+async function getVideoInfo(url) {
     try {
-        const info = await ytdl.getInfo(videoUrl, { timeout: 30000 });
-        const formats = info.formats;
-        return formats.map(format => ({
-            itag: format.itag,
-            quality: format.qualityLabel || format.audioBitrate,
-            container: format.container,
-            type: format.mimeType.includes('video') ? 'video' : 'audio'
-        }));
+        const videoId = getYouTubeVideoId(url);
+        if (!videoId) {
+            throw new Error('URL YouTube không hợp lệ');
+        }
+
+        const info = await ytdl.getInfo(videoId, {
+            timeout: 30000,
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9'
+                }
+            }
+        });
+
+        if (!info) {
+            throw new Error('Không thể lấy thông tin video');
+        }
+
+        // Lấy tiêu đề video
+        let title = info.videoDetails?.title;
+        if (!title || title.trim() === '') {
+            title = `Video_YouTube_${videoId}`;
+        }
+
+        // Lấy độ dài video
+        const duration = info.videoDetails?.lengthSeconds || 0;
+
+        // Lấy kích thước nội dung
+        const contentLength = info.formats?.[0]?.contentLength || 0;
+
+        return {
+            videoId,
+            title,
+            duration,
+            contentLength,
+            formats: info.formats
+        };
     } catch (error) {
-        logger.error(`Error in getAvailableFormats with @distube/ytdl-core: ${error.message}`);
-        return [];
+        logger.error(`Error getting video info: ${error.message}`, {
+            url,
+            error: error.stack
+        });
+        return null;
     }
 }
 
-// Hàm chọn định dạng khả dụng dựa trên chất lượng và loại nội dung
+// Hàm lấy ID video từ URL YouTube
+function getYouTubeVideoId(url) {
+    if (!url) return null;
+    
+    // Xử lý các định dạng URL YouTube khác nhau
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/watch\?.*&v=)([^&\n?#]+)/,
+        /youtube\.com\/shorts\/([^&\n?#]+)/,
+        /youtube\.com\/watch\?.*v=([^&\n?#]+)/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+
+    return null;
+}
+
+// Hàm chọn định dạng khả dụng
 async function selectAvailableFormat(videoUrl, quality, type) {
-    const formats = await getAvailableFormats(videoUrl);
-    if (formats.length === 0) return null;
+    try {
+        const info = await ytdl.getInfo(videoUrl);
+        const formats = info.formats;
 
-    const qualityMap = {
-        high: ['1080p', '720p'],
-        medium: ['720p', '480p'],
-        low: ['360p', '240p']
-    };
-    const preferredQualities = qualityMap[quality] || qualityMap['high'];
+        if (!formats || formats.length === 0) {
+            throw new Error('Không tìm thấy định dạng khả dụng');
+        }
 
-    for (let q of preferredQualities) {
-        const format = formats.find(f => f.quality === q && f.type.includes(type));
-        if (format) return format.itag;
+        // Lọc định dạng theo loại (video/audio)
+        const filteredFormats = formats.filter(format => {
+            if (type === 'video') {
+                return format.hasVideo && format.hasAudio;
+            } else if (type === 'audio') {
+                return format.hasAudio && !format.hasVideo;
+            }
+            return false;
+        });
+
+        if (filteredFormats.length === 0) {
+            throw new Error(`Không tìm thấy định dạng ${type} khả dụng`);
+        }
+
+        // Sắp xếp định dạng theo chất lượng
+        const sortedFormats = filteredFormats.sort((a, b) => {
+            if (type === 'video') {
+                return (b.height || 0) - (a.height || 0);
+            } else {
+                return (b.audioBitrate || 0) - (a.audioBitrate || 0);
+            }
+        });
+
+        // Chọn định dạng phù hợp với chất lượng yêu cầu
+        let selectedFormat;
+        if (quality === 'high') {
+            selectedFormat = sortedFormats[0];
+        } else if (quality === 'medium') {
+            selectedFormat = sortedFormats[Math.floor(sortedFormats.length / 2)];
+        } else {
+            selectedFormat = sortedFormats[sortedFormats.length - 1];
+        }
+
+        return selectedFormat.itag;
+    } catch (error) {
+        logger.error(`Error selecting format: ${error.message}`, {
+            url: videoUrl,
+            type,
+            quality,
+            error: error.stack
+        });
+        return null;
     }
-
-    if (type === 'video') {
-        const videoFormat = formats.find(f => f.type.includes('video'));
-        if (videoFormat) return videoFormat.itag;
-    }
-
-    const audioFormat = formats.find(f => f.type.includes('audio'));
-    if (audioFormat) return audioFormat.itag;
-
-    return formats[0]?.itag || null;
 }
 
 // Hàm tối ưu FFmpeg command
