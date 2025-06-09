@@ -191,377 +191,134 @@ async function processVideoWithMemoryOptimization(inputPath, outputPath, options
 // Hàm xử lý tải video hoặc âm thanh
 async function handleDownload(req, res, downloadProgressMap) {
     const { url, platform, type, quality } = req.body;
-
-    // Kiểm tra dữ liệu đầu vào
-    if (!url || !platform || !type) {
-        logger.warn(`Missing required fields (url, platform, type) from IP: ${req.ip}`);
-        throw new Error('Thiếu thông tin cần thiết (url, platform, type)');
-    }
-
-    // Áp dụng giới hạn tốc độ
-    await rateLimiter.consume('download_endpoint', 1);
-    logger.info(`Download request: ${type} from ${platform}, URL: ${url}, IP: ${req.ip}`);
-
-    // Kiểm tra FFmpeg
-    const ffmpegAvailable = await checkFFmpeg();
-    if (!ffmpegAvailable) {
-        logger.error('FFmpeg is not installed or accessible');
-        throw new Error('FFmpeg không được cài đặt hoặc không thể truy cập');
-    }
-
-    // Tạo ID tải xuống và lưu vào tiến trình
     const downloadId = uuidv4();
-    downloadProgressMap.set(downloadId, { progress: 0, error: null });
+    let tempFilePath = null;
+    let finalFilePath = null;
 
-    if (platform === 'youtube') {
-        // Kiểm tra tính hợp lệ của URL YouTube
-        const videoId = getYouTubeVideoId(url);
-        if (!videoId) {
-            logger.warn(`Invalid YouTube URL from IP: ${req.ip}: ${url}`);
-            throw new Error('URL YouTube không hợp lệ');
+    try {
+        // Kiểm tra dữ liệu đầu vào
+        if (!url || !platform || !type) {
+            logger.warn(`Missing required fields (url, platform, type) from IP: ${req.ip}`);
+            throw new Error('Thiếu thông tin cần thiết (url, platform, type)');
         }
 
-        // Kiểm tra tính khả dụng của video
-        const availability = await checkVideoAvailability(videoId);
-        if (!availability.isAvailable) {
-            logger.warn(`Video not available: ${videoId}, reason: ${availability.reason}`);
-            throw new Error(availability.reason);
-        }
-
-        // Đảm bảo videoTitle luôn có giá trị hợp lệ
-        let videoTitle = await getVideoTitle(videoId);
-        if (!videoTitle || videoTitle.trim() === '') {
-            videoTitle = `Video_YouTube_${videoId}`; // Fallback nếu không lấy được tiêu đề
-        }
-
-        const fileExtension = type === 'video' ? 'mp4' : 'mp3';
-        const sanitizedTitle = sanitizeFileName(videoTitle);
-        const fileName = `${sanitizedTitle}${quality ? `_${quality}` : ''}.${fileExtension}`;
-        const filePath = path.join(DOWNLOAD_DIR, fileName);
-        const tempFilePath = path.join(TEMP_DIR, `${downloadId}_${fileName}`);
-
-        // Tạo thư mục lưu trữ nếu chưa tồn tại
-        if (!await fsPromises.access(DOWNLOAD_DIR).then(() => true).catch(() => false)) {
-            await fsPromises.mkdir(DOWNLOAD_DIR, { recursive: true });
-        }
-
-        // Dọn dẹp thư mục downloads
-        await cleanFolder(DOWNLOAD_DIR);
-
-        // Kiểm tra nếu file đã tồn tại
-        if (await fsPromises.access(filePath).then(() => true).catch(() => false)) {
-            const stats = await fsPromises.stat(filePath);
-            if (stats.size === 0) {
-                logger.error(`Existing file is empty: ${filePath}`);
-                await fsPromises.unlink(filePath);
-            } else {
-                logger.info(`File đã tồn tại: ${filePath}`);
-                const isValid = await validateFile(filePath, type);
-                if (!isValid) {
-                    logger.error(`File tồn tại nhưng không hợp lệ: ${filePath}`);
-                    await fsPromises.unlink(filePath);
-                } else {
-                    downloadProgressMap.set(downloadId, { progress: 100, downloadUrl: `/downloads/${encodeURIComponent(fileName)}`, error: null });
-                    return res.status(200).json({ success: true, downloadUrl: `/downloads/${encodeURIComponent(fileName)}` });
-                }
-            }
-        }
-
-        // Trả về ngay lập tức với downloadId để client theo dõi tiến trình
-        res.status(200).json({ message: 'Đang tải, vui lòng chờ...', downloadId });
-
-        // Tải file bất đồng bộ
-        (async () => {
-            try {
-                let downloadedBytes = 0;
-                let totalBytes = 0;
-
-                // Phương pháp 1: Sử dụng yt-dlp để tải
-                try {
-                    const outputPath = path.join(DOWNLOAD_DIR, `${sanitizedTitle}${quality ? `_${quality}` : ''}`);
-                    const options = type === 'video' ? {
-                        format: 'bestvideo+bestaudio/best',
-                        output: `${outputPath}.%(ext)s`,
-                        mergeOutputFormat: 'mp4',
-                        noCheckCertificates: true,
-                        noWarnings: true,
-                        preferFreeFormats: true,
-                        addHeader: [
-                            'referer:youtube.com',
-                            'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                        ]
-                    } : {
-                        format: 'bestaudio',
-                        extractAudio: true,
-                        audioFormat: 'mp3',
-                        output: `${outputPath}.%(ext)s`,
-                        noCheckCertificates: true,
-                        noWarnings: true,
-                        preferFreeFormats: true,
-                        addHeader: [
-                            'referer:youtube.com',
-                            'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                        ]
-                    };
-
-                    const child = ytDlp.exec(url, options, { stdio: ['pipe', 'pipe', 'pipe'] });
-                    child.stdout.on('data', (data) => {
-                        const progressMatch = data.toString().match(/(\d+\.\d+)%/);
-                        if (progressMatch) {
-                            const progress = parseFloat(progressMatch[1]);
-                            downloadProgressMap.set(downloadId, { progress, error: null });
-                        }
-                    });
-
-                    let errorOutput = '';
-                    child.stderr.on('data', (data) => {
-                        errorOutput += data.toString();
-                    });
-
-                    await new Promise((resolve, reject) => {
-                        child.on('close', (code) => {
-                            if (code !== 0) {
-                                reject(new Error(`yt-dlp failed with code ${code}: ${errorOutput}`));
-                            } else {
-                                resolve();
-                            }
-                        });
-                    });
-                } catch (error) {
-                    logger.error(`yt-dlp-exec download failed: ${error.message}`);
-                    // Phương pháp 2: Fallback về @distube/ytdl-core
-                    try {
-                        const selectedItag = await selectAvailableFormat(url, quality, type);
-                        if (!selectedItag) {
-                            throw new Error('Không tìm thấy định dạng khả dụng cho video/âm thanh.');
-                        }
-
-                        logger.info(`Falling back to @distube/ytdl-core to download ${type} from URL: ${url}`);
-
-                        if (type === 'video') {
-                            // Tải luồng video
-                            const videoStream = ytdl(url, { quality: selectedItag });
-                            const videoPath = path.join(DOWNLOAD_DIR, `${sanitizedTitle}_video.mp4`);
-                            const videoFileStream = fs.createWriteStream(videoPath);
-                            videoStream.pipe(videoFileStream);
-
-                            let videoDownloadedBytes = 0;
-                            videoStream.on('progress', (chunkLength, downloaded, total) => {
-                                videoDownloadedBytes = downloaded;
-                                const progress = Math.round((downloaded / total) * 100 * 0.5); // 50% cho video
-                                downloadProgressMap.set(downloadId, { progress, error: null });
-                            });
-
-                            await new Promise((resolve, reject) => {
-                                videoStream.on('end', resolve);
-                                videoStream.on('error', reject);
-                            });
-
-                            if (videoDownloadedBytes === 0) {
-                                throw new Error('No video data downloaded from stream.');
-                            }
-
-                            // Tải luồng âm thanh
-                            const audioStream = ytdl(url, { quality: 'highestaudio', filter: 'audioonly' });
-                            const audioPath = path.join(DOWNLOAD_DIR, `${sanitizedTitle}_audio.mp4`);
-                            const audioFileStream = fs.createWriteStream(audioPath);
-                            audioStream.pipe(audioFileStream);
-
-                            let audioDownloadedBytes = 0;
-                            audioStream.on('progress', (chunkLength, downloaded, total) => {
-                                audioDownloadedBytes = downloaded;
-                                const progress = 50 + Math.round((downloaded / total) * 100 * 0.5); // 50% cho audio
-                                downloadProgressMap.set(downloadId, { progress, error: null });
-                            });
-
-                            await new Promise((resolve, reject) => {
-                                audioStream.on('end', resolve);
-                                audioStream.on('error', reject);
-                            });
-
-                            if (audioDownloadedBytes === 0) {
-                                throw new Error('No audio data downloaded from stream.');
-                            }
-
-                            // Hợp nhất video và âm thanh bằng FFmpeg
-                            let ffmpegError = '';
-                            await new Promise((resolve, reject) => {
-                                ffmpeg()
-                                    .input(videoPath)
-                                    .input(audioPath)
-                                    .outputOptions('-c:v copy')
-                                    .outputOptions('-c:a aac')
-                                    .save(filePath)
-                                    .on('end', resolve)
-                                    .on('error', (err) => {
-                                        ffmpegError = err.message;
-                                        reject(err);
-                                    });
-                            });
-
-                            if (ffmpegError) {
-                                throw new Error(`FFmpeg merge failed: ${ffmpegError}`);
-                            }
-
-                            // Xóa file tạm
-                            await fsPromises.unlink(videoPath);
-                            await fsPromises.unlink(audioPath);
-                        } else {
-                            // Tải âm thanh
-                            const stream = ytdl(url, { quality: selectedItag, filter: 'audioonly' });
-                            const fileStream = fs.createWriteStream(filePath);
-                            stream.pipe(fileStream);
-
-                            stream.on('progress', (chunkLength, downloaded, total) => {
-                                downloadedBytes = downloaded;
-                                totalBytes = total;
-                                const progress = Math.round((downloaded / total) * 100);
-                                downloadProgressMap.set(downloadId, { progress, error: null });
-                            });
-
-                            await new Promise((resolve, reject) => {
-                                stream.on('end', resolve);
-                                stream.on('error', reject);
-                            });
-
-                            if (downloadedBytes === 0) {
-                                throw new Error('No audio data downloaded from stream.');
-                            }
-
-                            const tempPath = filePath.replace('.mp3', '_temp.mp4');
-                            await fsPromises.rename(filePath, tempPath);
-                            let ffmpegError = '';
-                            await new Promise((resolve, reject) => {
-                                ffmpeg(tempPath)
-                                    .noVideo()
-                                    .audioCodec('mp3')
-                                    .on('end', resolve)
-                                    .on('error', (err) => {
-                                        ffmpegError = err.message;
-                                        reject(err);
-                                    })
-                                    .save(filePath);
-                            });
-                            if (ffmpegError) {
-                                throw new Error(`FFmpeg conversion failed: ${ffmpegError}`);
-                            }
-                            await fsPromises.unlink(tempPath);
-                        }
-                    } catch (fallbackError) {
-                        logger.error(`@distube/ytdl-core download failed: ${fallbackError.message}`);
-                        downloadProgressMap.set(downloadId, { progress: 0, error: 'Không thể tải video/âm thanh từ bất kỳ nguồn nào.' });
-                        return;
-                    }
-                }
-
-                // Kiểm tra lại file trước khi trả về URL
-                if (!await fsPromises.access(filePath).then(() => true).catch(() => false)) {
-                    logger.error(`Download failed, file not created: ${filePath}`);
-                    downloadProgressMap.set(downloadId, { progress: 0, error: 'Tải xuống thất bại. File không được tạo.' });
-                    return;
-                }
-
-                const stats = await fsPromises.stat(filePath);
-                if (stats.size === 0) {
-                    logger.error(`File tải về rỗng: ${filePath}`);
-                    await fsPromises.unlink(filePath);
-                    downloadProgressMap.set(downloadId, { progress: 0, error: 'File tải về rỗng. Vui lòng thử lại.' });
-                    return;
-                }
-
-                // Kiểm tra tính toàn vẹn của file
-                const isValid = await validateFile(filePath, type);
-                if (!isValid) {
-                    logger.error(`File không hợp lệ sau khi tải: ${filePath}`);
-                    await fsPromises.unlink(filePath);
-                    downloadProgressMap.set(downloadId, { progress: 0, error: 'File không hợp lệ. Vui lòng thử lại.' });
-                    return;
-                }
-
-                logger.info(`File tải về thành công: ${filePath}, kích thước: ${stats.size} bytes`);
-                downloadProgressMap.set(downloadId, { progress: 100, downloadUrl: `/downloads/${encodeURIComponent(fileName)}`, error: null });
-
-                // Kiểm tra sự tồn tại của file trước khi di chuyển
-                try {
-                    const tempFileExists = await fsPromises.access(tempFilePath)
-                        .then(() => true)
-                        .catch(() => false);
-
-                    if (!tempFileExists) {
-                        logger.error(`File tạm không tồn tại: ${tempFilePath}`);
-                        throw new Error('File tạm không tồn tại');
-                    }
-
-                    // Sau khi tải xong, di chuyển file từ temp sang downloads
-                    await fsPromises.rename(tempFilePath, filePath);
-                    await fsPromises.chmod(filePath, 0o644);
-
-                    // Dọn dẹp file tạm
-                    await cleanupTempFiles();
-
-                    // Xử lý video/audio với tối ưu bộ nhớ
-                    if (type === 'video') {
-                        await processVideoWithMemoryOptimization(
-                            filePath,
-                            filePath,
-                            { audioOnly: false }
-                        );
-                    } else if (type === 'audio') {
-                        await processVideoWithMemoryOptimization(
-                            filePath,
-                            filePath,
-                            { audioOnly: true }
-                        );
-                    }
-                } catch (error) {
-                    logger.error(`Lỗi khi xử lý file: ${error.message}`);
-                    downloadProgressMap.set(downloadId, { progress: 0, error: 'Lỗi khi xử lý file. Vui lòng thử lại.' });
-                    // Xóa file tạm nếu tồn tại
-                    try {
-                        await fsPromises.unlink(tempFilePath).catch(() => {});
-                    } catch (e) {
-                        logger.error(`Không thể xóa file tạm: ${e.message}`);
-                    }
-                }
-            } catch (error) {
-                logger.error(`Download error: ${error.message}`);
-                downloadProgressMap.set(downloadId, { progress: 0, error: error.message });
-                throw error;
-            }
-        })();
-    } else {
-        // Xử lý các nền tảng khác ngoài YouTube (sử dụng RapidAPI)
+        // Kiểm tra rate limit
         try {
-            const response = await fetchWithRetry('https://all-media-downloader1.p.rapidapi.com/media', {
-                method: 'POST',
-                headers: {
-                    'x-rapidapi-key': process.env.RAPIDAPI_KEY,
-                    'x-rapidapi-host': 'all-media-downloader1.p.rapidapi.com',
-                    'Content-Type': 'application/json'
-                },
-                data: { url, quality }
-            });
-
-            const data = response.data;
-            if (data.error) {
-                logger.warn(`RapidAPI returned error: ${data.error}`);
-                return res.status(400).json({ error: data.error });
-            }
-
-            if (type === 'video' && data.video) {
-                return res.status(200).json({ downloadUrl: data.video });
-            } else if (type === 'audio' && data.audio) {
-                return res.status(200).json({ downloadUrl: data.audio });
-            } else {
-                logger.warn(`RapidAPI did not return expected content for type ${type}`);
-                return res.status(400).json({ error: 'Không tìm thấy nội dung để tải. API không trả về link tải.' });
-            }
-        } catch (rapidError) {
-            logger.error(`RapidAPI Download Error: ${rapidError.message}`);
-            return res.status(500).json({
-                error: rapidError.message || 'Lỗi từ RapidAPI. Vui lòng kiểm tra API key hoặc thử lại sau.'
-            });
+            await rateLimiter.consume(req.ip);
+        } catch (error) {
+            logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+            throw new Error('Quá nhiều yêu cầu. Vui lòng thử lại sau!');
         }
+
+        // Lấy thông tin video
+        const videoInfo = await getVideoInfo(url);
+        if (!videoInfo) {
+            throw new Error('Không thể lấy thông tin video');
+        }
+
+        // Tạo tên file
+        const sanitizedTitle = sanitizeFileName(videoInfo.title);
+        const fileExtension = type === 'audio' ? 'mp3' : 'mp4';
+        const qualitySuffix = quality ? `_${quality}` : '';
+        const fileName = `${sanitizedTitle}${qualitySuffix}.${fileExtension}`;
+        
+        // Tạo đường dẫn file
+        tempFilePath = path.join(TEMP_DIR, `${downloadId}_${fileName}`);
+        finalFilePath = path.join(DOWNLOAD_DIR, fileName);
+
+        // Khởi tạo tiến trình
+        downloadProgressMap.set(downloadId, {
+            progress: 0,
+            status: 'starting',
+            fileName: fileName
+        });
+
+        // Tải video/audio
+        const format = await selectAvailableFormat(url, quality, type);
+        if (!format) {
+            throw new Error('Không tìm thấy định dạng phù hợp');
+        }
+
+        // Tải file
+        const stream = ytdl(url, { format: format });
+        const writeStream = fs.createWriteStream(tempFilePath);
+
+        stream.pipe(writeStream);
+
+        // Theo dõi tiến trình
+        let downloadedBytes = 0;
+        const totalBytes = videoInfo.contentLength;
+
+        stream.on('progress', (chunkLength, downloaded, total) => {
+            downloadedBytes = downloaded;
+            const progress = Math.round((downloaded / total) * 100);
+            downloadProgressMap.set(downloadId, {
+                progress,
+                status: 'downloading',
+                fileName: fileName,
+                downloaded: downloaded,
+                total: total
+            });
+        });
+
+        // Xử lý khi tải xong
+        await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+        });
+
+        // Kiểm tra file tạm
+        if (!fs.existsSync(tempFilePath)) {
+            throw new Error('File tạm không tồn tại sau khi tải');
+        }
+
+        // Di chuyển file từ temp sang downloads
+        await fsPromises.rename(tempFilePath, finalFilePath);
+
+        // Cập nhật tiến trình
+        downloadProgressMap.set(downloadId, {
+            progress: 100,
+            status: 'completed',
+            fileName: fileName,
+            filePath: finalFilePath
+        });
+
+        // Trả về thông tin file
+        res.json({
+            success: true,
+            downloadId: downloadId,
+            fileName: fileName,
+            filePath: `/downloads/${fileName}`
+        });
+
+    } catch (error) {
+        logger.error(`Error in handleDownload: ${error.message}`, {
+            error: error.stack,
+            url,
+            type,
+            quality
+        });
+
+        // Xóa file tạm nếu có
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+            try {
+                await fsPromises.unlink(tempFilePath);
+            } catch (unlinkError) {
+                logger.error(`Error deleting temp file: ${unlinkError.message}`);
+            }
+        }
+
+        // Cập nhật tiến trình lỗi
+        downloadProgressMap.set(downloadId, {
+            progress: 0,
+            status: 'error',
+            error: error.message
+        });
+
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
 }
 

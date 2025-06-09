@@ -185,7 +185,8 @@ async function downloadSubtitleWithYtdlCore(videoId, language) {
         const captions = info.player_response.captions;
         
         if (!captions || !captions.playerCaptionsTracklistRenderer) {
-            throw new Error('Video không có phụ đề nào');
+            logger.warn(`No captions available for video ${videoId}`);
+            return null;
         }
 
         const captionTracks = captions.playerCaptionsTracklistRenderer.captionTracks || [];
@@ -199,132 +200,59 @@ async function downloadSubtitleWithYtdlCore(videoId, language) {
         if (manualTrack) {
             selectedTrack = manualTrack;
             subtitleUrl = manualTrack.baseUrl;
-            logger.info(`Found manual subtitle for ${language}`);
         } else {
-            // Nếu không có phụ đề thủ công, thử tìm phụ đề tự động
-            logger.info(`Manual subtitle not found for ${language}, trying auto-generated subtitles...`);
-            const autoTrack = captionTracks.find(track => track.kind === 'asr');
+            // Thử tìm phụ đề tự động
+            const autoTrack = captionTracks.find(track => track.kind === 'asr' && track.languageCode === language);
             if (autoTrack) {
                 selectedTrack = autoTrack;
-                subtitleUrl = `${autoTrack.baseUrl}&tlang=${language}`;
-                logger.info(`Found auto-generated subtitle for ${language}`);
-            } else {
-                // Nếu không tìm thấy phụ đề tự động, thử dùng phụ đề thủ công đầu tiên và dịch
-                const firstManualTrack = captionTracks[0];
-                if (firstManualTrack) {
-                    selectedTrack = firstManualTrack;
-                    subtitleUrl = `${firstManualTrack.baseUrl}&tlang=${language}`;
-                    logger.info(`Using first manual track and translating to ${language}`);
-                }
+                subtitleUrl = autoTrack.baseUrl;
             }
         }
 
         if (!subtitleUrl) {
-            throw new Error(`Không tìm thấy phụ đề cho ngôn ngữ ${language}`);
+            logger.warn(`No subtitle found for language ${language} in video ${videoId}`);
+            return null;
         }
 
-        logger.info(`Downloading subtitle from URL: ${subtitleUrl}`, {
-            language,
-            trackInfo: selectedTrack ? {
-                languageCode: selectedTrack.languageCode,
-                kind: selectedTrack.kind,
-                name: selectedTrack.name?.simpleText
-            } : null
-        });
+        // Thêm các tham số cần thiết vào URL
+        subtitleUrl += `&fmt=vtt&tlang=${language}`;
 
-        // Thử tải phụ đề với retry
-        let retries = 3;
-        let lastError = null;
-        let lastResponse = null;
-
-        while (retries > 0) {
-            try {
-                const response = await fetchWithRetry(subtitleUrl, { 
-                    responseType: 'text',
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.5',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1'
-                    }
-                }, 3, 2000);
-
-                lastResponse = response;
-
-                if (!response.data || response.data.trim() === '') {
-                    // Thử tải lại với URL khác nếu nội dung trống
-                    if (selectedTrack && selectedTrack.kind === 'asr') {
-                        // Thử tải phụ đề thủ công thay vì tự động
-                        const manualTrack = captionTracks.find(track => track.kind !== 'asr');
-                        if (manualTrack) {
-                            subtitleUrl = `${manualTrack.baseUrl}&tlang=${language}`;
-                            selectedTrack = manualTrack;
-                            logger.info(`Retrying with manual track for ${language}`);
-                            continue;
-                        }
-                    }
-                    throw new Error('Nội dung phụ đề trống từ server');
-                }
-
-                // Kiểm tra nếu là XML
-                if (response.data.includes('<?xml') || response.data.includes('<transcript>')) {
-                    const vttContent = convertXmlToVtt(response.data);
-                    if (!vttContent) {
-                        throw new Error('Không thể chuyển đổi XML sang VTT');
-                    }
-                    return vttContent;
-                }
-
-                // Kiểm tra nếu là VTT
-                if (response.data.includes('WEBVTT')) {
-                    return response.data;
-                }
-
-                // Nếu không phải XML hoặc VTT, thử chuyển đổi sang VTT
-                try {
-                    const vttContent = convertXmlToVtt(response.data);
-                    if (vttContent) {
-                        return vttContent;
-                    }
-                } catch (error) {
-                    logger.warn(`Failed to convert content to VTT: ${error.message}`);
-                }
-
-                // Nếu không thể chuyển đổi, trả về nội dung gốc
-                return response.data;
-            } catch (error) {
-                lastError = error;
-                retries--;
-                if (retries > 0) {
-                    logger.warn(`Retrying subtitle download (${retries} attempts left): ${error.message}`, {
-                        responseStatus: lastResponse?.status,
-                        responseHeaders: lastResponse?.headers,
-                        errorDetails: error.response?.data
-                    });
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Đợi 2 giây trước khi thử lại
-                }
+        // Tải nội dung phụ đề
+        const response = await fetchWithRetry(subtitleUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9'
             }
-        }
-
-        // Log chi tiết lỗi cuối cùng
-        logger.error('Subtitle download failed after all retries', {
-            lastError: lastError?.message,
-            responseStatus: lastResponse?.status,
-            responseHeaders: lastResponse?.headers,
-            errorDetails: lastError?.response?.data,
-            url: subtitleUrl,
-            language
         });
 
-        throw lastError || new Error('Không thể tải phụ đề sau nhiều lần thử');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch subtitle: ${response.status} ${response.statusText}`);
+        }
+
+        const content = await response.text();
+        
+        // Kiểm tra nội dung phụ đề
+        if (!content || content.trim() === '') {
+            logger.warn(`Empty subtitle content for video ${videoId} and language ${language}`);
+            return null;
+        }
+
+        // Làm sạch nội dung phụ đề
+        const cleanedContent = cleanSubtitleContent(content);
+        if (!cleanedContent) {
+            logger.warn(`Invalid subtitle content after cleaning for video ${videoId} and language ${language}`);
+            return null;
+        }
+
+        return cleanedContent;
     } catch (error) {
         logger.error(`Error downloading subtitle with ytdl-core: ${error.message}`, {
-            error: error.stack,
-            videoId: videoId,
-            language: language
+            videoId,
+            language,
+            error: error.stack
         });
-        throw error;
+        return null;
     }
 }
 
