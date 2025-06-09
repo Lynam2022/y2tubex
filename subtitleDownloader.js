@@ -16,8 +16,7 @@ const {
     extractTextFromVtt,
     getAvailableSubtitleLanguages,
     checkVideoAvailability,
-    getDefaultLanguage,
-    getYouTubeVideoId
+    getDefaultLanguage
 } = require('./utils');
 const { JSDOM } = require('jsdom');
 
@@ -146,11 +145,6 @@ function detectSubtitleLanguage(content) {
 // Hàm tải phụ đề bằng yt-dlp với kiểm tra ngôn ngữ
 async function downloadSubtitleWithYtDlp(url, language, outputPath) {
     try {
-        const videoId = getYouTubeVideoId(url);
-        if (!videoId) {
-            throw new Error('URL YouTube không hợp lệ');
-        }
-
         const options = {
             skipDownload: true,
             writeSub: true,
@@ -175,13 +169,8 @@ async function downloadSubtitleWithYtDlp(url, language, outputPath) {
 }
 
 // Hàm tải phụ đề bằng @distube/ytdl-core với kiểm tra ngôn ngữ
-async function downloadSubtitleWithYtdlCore(url, language) {
+async function downloadSubtitleWithYtdlCore(videoId, language) {
     try {
-        const videoId = getYouTubeVideoId(url);
-        if (!videoId) {
-            throw new Error('URL YouTube không hợp lệ');
-        }
-
         const info = await ytdl.getInfo(videoId, { 
             timeout: 30000,
             requestOptions: {
@@ -243,7 +232,6 @@ async function downloadSubtitleWithYtdlCore(url, language) {
 
         const content = await response.text();
         
-        // Kiểm tra nội dung phụ đề
         if (!content || content.trim() === '') {
             logger.warn(`Empty subtitle content for video ${videoId} and language ${language}`);
             return null;
@@ -270,33 +258,49 @@ async function downloadSubtitleWithYtdlCore(url, language) {
 // Hàm tải phụ đề bằng node-youtube-subtitles
 async function downloadSubtitleWithNodeSubtitles(videoId, language) {
     try {
-        // Kiểm tra xem module có tồn tại không
-        let nodeSubtitles;
-        try {
-            nodeSubtitles = require('node-youtube-subtitles');
-        } catch (error) {
-            logger.warn('Module node-youtube-subtitles not found, skipping this method');
-            return null;
-        }
-
-        const subtitles = await nodeSubtitles.getSubtitles({
-            videoID: videoId,
-            lang: language
+        const { getSubtitles } = require('node-youtube-subtitles');
+        
+        // Thử tải phụ đề thủ công trước
+        let subtitles = await getSubtitles({ 
+            videoID: videoId, 
+            lang: language 
         });
 
+        // Nếu không có phụ đề thủ công, thử tải phụ đề tự động
         if (!subtitles || subtitles.length === 0) {
-            logger.warn(`No subtitles found using node-youtube-subtitles for video ${videoId} and language ${language}`);
-            return null;
+            subtitles = await getSubtitles({ 
+                videoID: videoId, 
+                lang: `${language}.auto` 
+            });
         }
 
-        // Chuyển đổi định dạng phụ đề
-        const vttContent = arrayToVtt(subtitles);
-        if (!vttContent) {
-            logger.warn(`Failed to convert subtitles to VTT format for video ${videoId}`);
-            return null;
+        // Nếu vẫn không có, thử tải phụ đề tiếng Anh làm fallback
+        if (!subtitles || subtitles.length === 0) {
+            subtitles = await getSubtitles({ 
+                videoID: videoId, 
+                lang: 'en' 
+            });
         }
 
-        return vttContent;
+        if (subtitles && subtitles.length > 0) {
+            const content = arrayToVtt(subtitles);
+            if (!content || content.trim() === '') {
+                logger.warn(`Empty subtitle content from node-youtube-subtitles for language ${language}`);
+                return null;
+            }
+
+            // Kiểm tra và làm sạch nội dung
+            const cleanedContent = cleanSubtitleContent(content);
+            if (!cleanedContent) {
+                logger.warn(`Failed to clean subtitle content from node-youtube-subtitles for language ${language}`);
+                return null;
+            }
+
+            return content;
+        }
+
+        logger.warn(`No subtitles found with node-youtube-subtitles for language ${language}`);
+        return null;
     } catch (error) {
         logger.error(`node-youtube-subtitles Error for language ${language}: ${error.message}`);
         return null;
@@ -452,7 +456,7 @@ async function handleDownloadSubtitle(req, res, downloadProgressMap) {
 
                     // If yt-dlp fails, try ytdl-core
                     if (!subtitleContent) {
-                        subtitleContent = await downloadSubtitleWithYtdlCore(url, language);
+                        subtitleContent = await downloadSubtitleWithYtdlCore(videoId, language);
                     }
 
                     // If both fail, try node-subtitles
@@ -536,7 +540,7 @@ async function downloadAllSubtitles(url, downloadProgressMap) {
                 let selectedLang = lang;
 
                 // Phương pháp 1: Sử dụng @distube/ytdl-core
-                subtitleContent = await downloadSubtitleWithYtdlCore(url, lang);
+                subtitleContent = await downloadSubtitleWithYtdlCore(videoId, lang);
 
                 // Phương pháp 2: Thử với yt-dlp nếu phương pháp 1 thất bại
                 if (!subtitleContent) {
