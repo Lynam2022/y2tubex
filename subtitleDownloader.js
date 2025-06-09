@@ -16,7 +16,8 @@ const {
     extractTextFromVtt,
     getAvailableSubtitleLanguages,
     checkVideoAvailability,
-    getDefaultLanguage
+    getDefaultLanguage,
+    getYouTubeVideoId
 } = require('./utils');
 const { JSDOM } = require('jsdom');
 
@@ -145,6 +146,11 @@ function detectSubtitleLanguage(content) {
 // Hàm tải phụ đề bằng yt-dlp với kiểm tra ngôn ngữ
 async function downloadSubtitleWithYtDlp(url, language, outputPath) {
     try {
+        const videoId = getYouTubeVideoId(url);
+        if (!videoId) {
+            throw new Error('URL YouTube không hợp lệ');
+        }
+
         const options = {
             skipDownload: true,
             writeSub: true,
@@ -169,8 +175,13 @@ async function downloadSubtitleWithYtDlp(url, language, outputPath) {
 }
 
 // Hàm tải phụ đề bằng @distube/ytdl-core với kiểm tra ngôn ngữ
-async function downloadSubtitleWithYtdlCore(videoId, language) {
+async function downloadSubtitleWithYtdlCore(url, language) {
     try {
+        const videoId = getYouTubeVideoId(url);
+        if (!videoId) {
+            throw new Error('URL YouTube không hợp lệ');
+        }
+
         const info = await ytdl.getInfo(videoId, { 
             timeout: 30000,
             requestOptions: {
@@ -441,7 +452,7 @@ async function handleDownloadSubtitle(req, res, downloadProgressMap) {
 
                     // If yt-dlp fails, try ytdl-core
                     if (!subtitleContent) {
-                        subtitleContent = await downloadSubtitleWithYtdlCore(videoId, language);
+                        subtitleContent = await downloadSubtitleWithYtdlCore(url, language);
                     }
 
                     // If both fail, try node-subtitles
@@ -525,7 +536,7 @@ async function downloadAllSubtitles(url, downloadProgressMap) {
                 let selectedLang = lang;
 
                 // Phương pháp 1: Sử dụng @distube/ytdl-core
-                subtitleContent = await downloadSubtitleWithYtdlCore(videoId, lang);
+                subtitleContent = await downloadSubtitleWithYtdlCore(url, lang);
 
                 // Phương pháp 2: Thử với yt-dlp nếu phương pháp 1 thất bại
                 if (!subtitleContent) {
